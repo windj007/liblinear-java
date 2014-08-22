@@ -5,4 +5,4 @@ This is a fork of original repository https://github.com/bwaldvogel/liblinear-ja
 
 Original version of liblinear implementing incremental and decremental learning can be found here http://www.csie.ntu.edu.tw/~cjlin/papers/ws/index.html.
 
-Currently the work in the very beginning.
+Currently the work is in the very beginning.
