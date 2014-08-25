@@ -21,6 +21,8 @@ public class Train {
 
     private double    bias             = 1;
     private boolean   cross_validation = false;
+    private boolean   warm_start = false;
+    private Model     initialModel = null;
     private String    inputFilename;
     private String    modelFilename;
     private int       nr_fold;
@@ -97,6 +99,7 @@ public class Train {
             + "-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default -1)%n"
             + "-wi weight: weights adjust the parameter C of different classes (see README for details)%n"
             + "-v n: n-fold cross validation mode%n"
+            + "-i initial model file: use a previously trained model for incremental/decremental training (only for -s 0 and 2)%n"
             + "-q : quiet mode (no outputs)%n");
         System.exit(1);
     }
@@ -161,6 +164,15 @@ public class Train {
                     i--;
                     Linear.disableDebugOutput();
                     break;
+                case 'i':
+                	warm_start = true;
+                	try {
+                	    initialModel = Linear.loadModel(new File(argv[i]));
+                	} catch (IOException ex) {
+                		System.err.printf("can't open initial model file %s%n", argv[i]);
+                        exit_with_help();
+                	}
+                	break;
                 default:
                     System.err.println("unknown option");
                     exit_with_help();
@@ -169,6 +181,15 @@ public class Train {
 
         // determine filenames
 
+        if (warm_start) {
+        	if (param.solverType != SolverType.L2R_LR && param.solverType != SolverType.L2R_L2LOSS_SVC) {
+        		System.err.println("-i is supported only for -s 0 and 2%n");
+        		exit_with_help();
+        	}
+        	if (param.solverType != initialModel.solverType)
+        		System.err.println("Warning: the solver type of initial model does not match your -s option");
+        }
+        
         if (i >= argv.length) exit_with_help();
 
         inputFilename = argv[i];
@@ -344,7 +365,14 @@ public class Train {
         if (cross_validation)
             do_cross_validation();
         else {
-            Model model = Linear.train(prob, param);
+        	Model model = null;
+        	if (warm_start) {
+        		if (prob.n != initialModel.nr_feature)
+        			System.err.printf("WARNING: The number of features in the input file does not match that in the initial model%n");
+        		model = Linear.warm_start_train(prob, param, initialModel);
+        	} else {
+        		model = Linear.train(prob, param);
+        	}
             Linear.saveModel(new File(modelFilename), model);
         }
     }

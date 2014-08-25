@@ -14,8 +14,11 @@ import java.io.PrintStream;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Formatter;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.regex.Pattern;
 
@@ -1631,11 +1634,14 @@ public class Linear {
         array.set(idxB, temp);
     }
 
+    public static Model train(Problem prob, Parameter param) {
+    	return warm_start_train(prob, param, null);
+    }
 
     /**
      * @throws IllegalArgumentException if the feature nodes of prob are not sorted in ascending order
      */
-    public static Model train(Problem prob, Parameter param) {
+    public static Model warm_start_train(Problem prob, Parameter param, Model wsmodel) {
 
         if (prob == null) throw new IllegalArgumentException("problem must not be null");
         if (param == null) throw new IllegalArgumentException("parameter must not be null");
@@ -1742,10 +1748,36 @@ public class Linear {
                     for (; k < sub_prob.l; k++)
                         sub_prob.y[k] = -1;
 
+                    if (wsmodel != null) {
+                    	int min_nr_feature = Math.min(w_size, wsmodel.nr_feature);
+                    	if (wsmodel.label[0] == model.label[0])
+                    		for (int i = 0; i < min_nr_feature; i++)
+                    			model.w[i] = wsmodel.w[i];
+                    	else
+                    		for (int i = 0; i < min_nr_feature; i++)
+                    			model.w[i] = -wsmodel.w[i];
+                    	for (int i = min_nr_feature; i < w_size; i++)
+                    		model.w[i] = 0;
+                    } else
+                    	for (int i = 0; i < w_size; i++)
+                    		model.w[i] = 0;
+                    	
                     train_one(sub_prob, param, model.w, weighted_C[0], weighted_C[1]);
                 } else {
                     model.w = new double[w_size * nr_class];
                     double[] w = new double[w_size];
+                    
+                    int min_nr_feature = w_size;
+                    int nr_matched_label = 0;
+                    Map<Integer, Integer> label_map = null;
+                    if (wsmodel != null)
+                    {
+                    	min_nr_feature = Math.min(w_size, wsmodel.nr_feature);
+                    	label_map = new HashMap<Integer, Integer>();
+                    	for(int i = 0; i < wsmodel.nr_class; i++)
+                    		label_map.put(wsmodel.label[i], i);
+                    }
+                    
                     for (int i = 0; i < nr_class; i++) {
                         int si = start[i];
                         int ei = si + count[i];
@@ -1758,10 +1790,34 @@ public class Linear {
                         for (; k < sub_prob.l; k++)
                             sub_prob.y[k] = -1;
 
+                        int index = -1;
+                        if(wsmodel != null)
+                        {
+                        	Integer found = label_map.get(model.label[i]);
+                        	if(found != null)
+                        		index = found;
+                        }
+                    	if(index >= 0)
+                    	{
+                    		for (int j = 0; j < min_nr_feature; j++)
+                    			w[j] = wsmodel.w[j * wsmodel.nr_class + index];
+                    		for (int j = min_nr_feature; j < w_size; j++)
+                    			w[j] = 0;
+                    		nr_matched_label++;
+                    	}
+                    	else 
+                    		for(int j = 0; j < w_size; j++)
+                    			w[j] = 0;
+
                         train_one(sub_prob, param, w, weighted_C[i], param.C);
 
                         for (int j = 0; j < n; j++)
                             model.w[j * nr_class + i] = w[j];
+                    }
+                    if (wsmodel != null) {
+                    	if (nr_matched_label != nr_class || nr_class != wsmodel.nr_class)
+                    		System.err.printf("WARNING: class labels in training data do not match those in the initial model.\n");
+                    	label_map = null;
                     }
                 }
             }
@@ -1857,7 +1913,7 @@ public class Linear {
     }
 
     public static void disableDebugOutput() {
-        setDebugOutput(null);
+        setDebugOutput(null);    	
     }
 
     public static void enableDebugOutput() {

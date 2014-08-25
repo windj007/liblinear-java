@@ -44,14 +44,19 @@ class Tron {
         double[] w_new = new double[n];
         double[] g = new double[n];
 
+        double[] w0 = new double[n];
         for (i = 0; i < n; i++)
-            w[i] = 0;
+            w0[i] = 0;
 
+        fun_obj.fun(w0);
+        fun_obj.grad(w0, g);
+        double gnorm1 = euclideanNorm(g);
+        w0 = null;
+        
         f = fun_obj.fun(w);
         fun_obj.grad(w, g);
         delta = euclideanNorm(g);
-        double gnorm1 = delta;
-        double gnorm = gnorm1;
+        double gnorm = delta;
 
         if (gnorm <= eps * gnorm1) search = 0;
 
